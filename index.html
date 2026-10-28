@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>time — Plan time across timezones</title>
+  <meta name="description" content="Plan and find overlapping working hours across multiple global time zones with interactive availability visualization.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2309090b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 16 14'/></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+      <a href="/" class="brand" aria-label="time home">
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span class="brand-text">time</span>
+      </a>
+
+      <div class="header-actions">
+        <div id="status-pill" class="status-pill" title="Click to snap to live current time">
+          <span id="status-dot" class="status-dot"></span>
+          <span id="status-text">Exploring time</span>
+        </div>
+
+        <button id="btn-add-location" class="btn-add-location" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          <span>Add location</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Sub-Header: Your day, Main Date, Location Count -->
+    <section class="day-header-row">
+      <div class="day-header-info">
+        <div class="day-subheading">Your day</div>
+        <h1 id="day-main-heading" class="day-main-heading">Wednesday 28 October</h1>
+      </div>
+      <div id="locations-counter" class="locations-counter">3 of 5 locations</div>
+    </section>
+
+    <!-- Location Cards Grid -->
+    <main>
+      <div id="location-cards-grid" class="location-cards-grid">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+    </main>
+
+    <!-- Overlap Availability Section -->
+    <section class="overlap-section" aria-label="Shared availability timeline">
+      <div class="overlap-header">
+        <div class="overlap-title-wrap">
+          <div id="overlap-title" class="overlap-title perfect">
+            <svg id="overlap-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span id="overlap-title-text">A perfect overlap</span>
+          </div>
+          <div id="overlap-desc" class="overlap-description">Shared availability across the next 24 hours.</div>
+        </div>
+
+        <button id="btn-current-time" class="btn-current-time" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span>Current time</span>
+        </button>
+      </div>
+
+      <!-- 48-slot 24h Timeline Bar -->
+      <div id="timeline-container" class="timeline-container">
+        <div id="timeline-track" class="timeline-slots-track">
+          <!-- 48 30-min slots rendered dynamically -->
+          <div id="scrubber-handle" class="scrubber-handle" role="slider" aria-label="Scrub timeline" tabindex="0">
+            <div class="scrubber-notch"></div>
+          </div>
+        </div>
+
+        <!-- 6-hour interval labels -->
+        <div id="timeline-time-labels" class="timeline-time-labels">
+          <span id="label-0">13:00</span>
+          <span id="label-1">19:00</span>
+          <span id="label-2">01:00</span>
+          <span id="label-3">07:00</span>
+          <span id="label-4">12:30</span>
+        </div>
+      </div>
+
+      <!-- Footer: Reference Location & Legend -->
+      <div class="timeline-footer">
+        <div id="timeline-reference-text" class="timeline-reference-text">Times shown in London</div>
+        <div class="timeline-legend">
+          <div class="legend-item">
+            <span class="legend-swatch outside"></span>
+            <span>✕ Outside hours</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-swatch near"></span>
+            <span>— Within 1 hour</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-swatch perfect"></span>
+            <span>✓ Works for everyone</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Advanced Settings Section -->
+    <section id="advanced-section" class="advanced-section is-open">
+      <div id="advanced-toggle-header" class="advanced-toggle-header">
+        <div class="advanced-title-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="4" y1="21" x2="4" y2="14"/>
+            <line x1="4" y1="10" x2="4" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12" y2="3"/>
+            <line x1="20" y1="21" x2="20" y2="16"/>
+            <line x1="20" y1="12" x2="20" y2="3"/>
+            <line x1="1" y1="14" x2="7" y2="14"/>
+            <line x1="9" y1="8" x2="15" y2="8"/>
+            <line x1="17" y1="16" x2="23" y2="16"/>
+          </svg>
+          <span>Advanced settings</span>
+        </div>
+        <div class="advanced-title-right">
+          <span>Working hours and preferences</span>
+          <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="advanced-content">
+        <div class="advanced-help-text">
+          Working hours are local to each location, every day. Overnight hours are supported; matching start and end means all day.
+        </div>
+
+        <div id="working-hours-grid" class="working-hours-grid">
+          <!-- Dynamic working hours inputs per location -->
+        </div>
+
+        <div class="preferences-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="checkbox-12h">
+            <span>Use 12-hour time</span>
+          </label>
+        </div>
+
+        <div class="advanced-legend-footnote">
+          Green: everyone is working. Yellow: everyone is within one hour of work. Red: at least one location is further outside.
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Add Location Modal -->
+  <div id="modal-add-location" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div id="modal-title" class="modal-title">Add location</div>
+        <button id="btn-modal-close" class="modal-close-btn" type="button" aria-label="Close modal">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" id="modal-search-input" class="modal-search-input" placeholder="Search city, country, or timezone..." autocomplete="off">
+      </div>
+
+      <div class="popular-chips">
+        <span class="popular-label">Popular:</span>
+        <button class="popular-chip" data-city="New York">New York</button>
+        <button class="popular-chip" data-city="Tokyo">Tokyo</button>
+        <button class="popular-chip" data-city="Singapore">Singapore</button>
+        <button class="popular-chip" data-city="Dubai">Dubai</button>
+        <button class="popular-chip" data-city="Paris">Paris</button>
+        <button class="popular-chip" data-city="Sydney">Sydney</button>
+      </div>
+
+      <div id="modal-results-list" class="modal-results-list">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast-notice"></div>
+
+  <!-- Scripts -->
+  <script src="cities.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
