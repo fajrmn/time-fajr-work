@@ -1,5 +1,5 @@
 // ==========================================================================
-// time.fajr.work — Application Logic
+// time.fajr.work — World Time Availability Planner
 // ==========================================================================
 
 (function () {
@@ -8,7 +8,7 @@
   const STORAGE_KEY = "fajr_time_planner_v1";
   const MAX_RECOMMENDED_LOCATIONS = 5;
 
-  // Initial State matching the screenshot exactly
+  // Default initial locations matching the reference
   const DEFAULT_STATE = {
     use12Hour: false,
     referenceIndex: 0,
@@ -32,19 +32,22 @@
         country: "Hong Kong SAR",
         timezone: "Asia/Hong_Kong",
         workStart: 8,  // 08:00 AM
-        workEnd: 24    // 12:00 AM (midnight)
+        workEnd: 24    // 12:00 AM midnight
       }
     ]
   };
 
   let state = loadState();
 
-  // Selected timeline slot (0 to 47).
-  // Slot 4 corresponds to anchor reference time (e.g. 15:00 in London)
+  // Mode: isExploringMode is true when the user scrubs or picks a specific slot.
+  // When false, the app is in LIVE TIME mode, showing real-time accurate clock.
+  let isExploringMode = false;
+
   let selectedSlotIndex = 4;
+  let currentLiveSlotIndex = 4;
   let timelineBaseDate = null;
   let isDraggingScrubber = false;
-  let liveTimerInterval = null;
+  let liveTickerInterval = null;
 
   // DOM Elements
   const dayMainHeading = document.getElementById("day-main-heading");
@@ -87,38 +90,71 @@
     setupEventListeners();
     renderAll();
 
-    // Auto-update live time every minute
-    liveTimerInterval = setInterval(() => {
-      if (isAtLiveCurrentTime()) {
-        initTimelineAnchor();
+    // High-precision live ticker: updates clock every second when in Live mode
+    liveTickerInterval = setInterval(() => {
+      const prevLiveSlot = currentLiveSlotIndex;
+      updateLiveSlot();
+
+      // If slot changed or in live mode, update display
+      if (!isExploringMode) {
+        selectedSlotIndex = currentLiveSlotIndex;
         renderAll();
       }
-    }, 60000);
+    }, 1000);
   }
 
-  // Anchor timeline: current reference time is at slot 4,
-  // so timeline spans from [referenceTime - 2 hours] to [referenceTime + 22 hours] (48 slots of 30 mins)
+  // Anchor timeline base to start 2 hours before current whole hour in reference timezone
   function initTimelineAnchor() {
     const now = new Date();
-    const minutes = now.getMinutes();
-    const roundedMinutes = minutes >= 30 ? 30 : 0;
-    const currentAnchor = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), roundedMinutes, 0, 0);
+    const refLocation = state.locations[state.referenceIndex] || state.locations[0] || DEFAULT_STATE.locations[0];
+    const refTime = getTimeInTimezone(now, refLocation.timezone);
 
-    // Timeline begins 2 hours (4 slots * 30 min) earlier
-    timelineBaseDate = new Date(currentAnchor.getTime() - 4 * 30 * 60 * 1000);
-    selectedSlotIndex = 4;
+    // Timeline begins on the whole hour, 2 hours before the current hour in reference timezone
+    // (e.g. if London is 14:35, timeline begins at 12:00:00)
+    const minutesSinceBase = 2 * 60 + refTime.minute;
+    const msSinceBase = (minutesSinceBase * 60 + refTime.second) * 1000 + now.getMilliseconds();
+
+    timelineBaseDate = new Date(now.getTime() - msSinceBase);
+
+    // Current slot index (each slot is 30 minutes)
+    const currentSlot = Math.floor(minutesSinceBase / 30);
+    currentLiveSlotIndex = Math.max(0, Math.min(47, currentSlot));
+
+    if (!isExploringMode) {
+      selectedSlotIndex = currentLiveSlotIndex;
+    }
+  }
+
+  function updateLiveSlot() {
+    if (!timelineBaseDate) {
+      initTimelineAnchor();
+      return;
+    }
+    const now = new Date();
+    const elapsedMs = now.getTime() - timelineBaseDate.getTime();
+    const elapsedMinutes = Math.floor(elapsedMs / (60 * 1000));
+    const slot = Math.floor(elapsedMinutes / 30);
+
+    // If current time moved past slot 40, realign the anchor to keep future visible
+    if (slot > 40 || slot < 0) {
+      initTimelineAnchor();
+    } else {
+      currentLiveSlotIndex = Math.max(0, Math.min(47, slot));
+    }
   }
 
   function getSlotDate(slotIndex) {
     return new Date(timelineBaseDate.getTime() + slotIndex * 30 * 60 * 1000);
   }
 
-  function getSelectedDate() {
-    return getSlotDate(selectedSlotIndex);
-  }
-
-  function isAtLiveCurrentTime() {
-    return selectedSlotIndex === 4;
+  // Active date for evaluation and cards:
+  // In Live mode -> exact real-time Date() with second/minute accuracy
+  // In Exploring mode -> the selected 30-minute slot Date
+  function getActiveDate() {
+    if (isExploringMode) {
+      return getSlotDate(selectedSlotIndex);
+    }
+    return new Date();
   }
 
   // ========================================================================
@@ -159,7 +195,8 @@
       weekday: "short",
       hour: "numeric",
       minute: "numeric",
-      hour12: false
+      second: "numeric",
+      hourCycle: "h23"
     });
 
     const parts = formatter.formatToParts(date);
@@ -169,6 +206,7 @@
     return {
       hour: parseInt(map.hour, 10),
       minute: parseInt(map.minute, 10),
+      second: parseInt(map.second, 10),
       day: parseInt(map.day, 10),
       month: parseInt(map.month, 10),
       year: parseInt(map.year, 10),
@@ -281,33 +319,34 @@
   // Rendering
   // ========================================================================
   function renderAll() {
-    const selectedDate = getSelectedDate();
+    const activeDate = getActiveDate();
     const refLocation = state.locations[state.referenceIndex] || state.locations[0];
 
     // 1. Day Header
     if (refLocation) {
-      dayMainHeading.textContent = formatDateFull(selectedDate, refLocation.timezone);
+      dayMainHeading.textContent = formatDateFull(activeDate, refLocation.timezone);
     }
     locationsCounter.textContent = `${state.locations.length} of ${MAX_RECOMMENDED_LOCATIONS} locations`;
 
     // 2. Status Pill (Exploring time vs Live time)
-    const isLive = isAtLiveCurrentTime();
-    if (isLive) {
-      statusDot.className = "status-dot live";
-      statusText.textContent = "Live time";
-    } else {
+    if (isExploringMode) {
       statusDot.className = "status-dot";
       statusText.textContent = "Exploring time";
+      statusPill.title = "Exploring a planned time. Click to return to accurate live current time.";
+    } else {
+      statusDot.className = "status-dot live";
+      statusText.textContent = "Live time";
+      statusPill.title = "Currently displaying accurate live time. Drag or click the timeline to explore.";
     }
 
     // 3. Location Cards
-    renderLocationCards(selectedDate);
+    renderLocationCards(activeDate);
 
     // 4. Timeline Bar & Scrubber
-    renderTimeline(selectedDate);
+    renderTimeline();
 
     // 5. Overlap Headline
-    renderOverlapHeader(selectedDate);
+    renderOverlapHeader(activeDate);
 
     // 6. Working Hours in Advanced Settings
     renderWorkingHoursGrid();
@@ -318,17 +357,17 @@
     }
   }
 
-  function renderLocationCards(selectedDate) {
+  function renderLocationCards(activeDate) {
     locationCardsGrid.innerHTML = "";
 
     const refLocation = state.locations[state.referenceIndex] || state.locations[0];
-    const refTime = refLocation ? getTimeInTimezone(selectedDate, refLocation.timezone) : null;
+    const refTime = refLocation ? getTimeInTimezone(activeDate, refLocation.timezone) : null;
 
     state.locations.forEach((loc, index) => {
       const isReference = index === state.referenceIndex;
-      const timeInfo = getTimeInTimezone(selectedDate, loc.timezone);
-      const gmtOffset = getGmtOffset(selectedDate, loc.timezone);
-      const evalResult = evaluateLocationStatus(loc, selectedDate);
+      const timeInfo = getTimeInTimezone(activeDate, loc.timezone);
+      const gmtOffset = getGmtOffset(activeDate, loc.timezone);
+      const evalResult = evaluateLocationStatus(loc, activeDate);
 
       const card = document.createElement("div");
       card.className = `location-card${isReference ? " is-reference" : ""}`;
@@ -405,7 +444,7 @@
     });
   }
 
-  function renderTimeline(selectedDate) {
+  function renderTimeline() {
     const handle = scrubberHandle;
     timelineTrack.innerHTML = "";
     timelineTrack.appendChild(handle);
@@ -458,8 +497,8 @@
     scrubberHandle.style.left = `${centerOffset}px`;
   }
 
-  function renderOverlapHeader(selectedDate) {
-    const currentOverall = evaluateSlotOverall(selectedDate);
+  function renderOverlapHeader(activeDate) {
+    const currentOverall = evaluateSlotOverall(activeDate);
 
     overlapTitle.className = `overlap-title ${currentOverall}`;
 
@@ -592,6 +631,7 @@
     if (index >= 0 && index < state.locations.length) {
       state.referenceIndex = index;
       saveState();
+      initTimelineAnchor();
       renderAll();
       showToast(`Set ${state.locations[index].city} as timeline reference`);
     }
@@ -611,10 +651,16 @@
     if (slotIdx > 47) slotIdx = 47;
     if (slotIdx < 0) slotIdx = 0;
 
-    if (slotIdx !== selectedSlotIndex) {
-      selectedSlotIndex = slotIdx;
-      renderAll();
-    }
+    isExploringMode = true;
+    selectedSlotIndex = slotIdx;
+    renderAll();
+  }
+
+  function snapToLiveCurrentTime() {
+    isExploringMode = false;
+    initTimelineAnchor();
+    renderAll();
+    showToast("Snapped to live current time");
   }
 
   function setupEventListeners() {
@@ -660,18 +706,10 @@
     });
 
     // Current Time button
-    btnCurrentTime.addEventListener("click", () => {
-      initTimelineAnchor();
-      renderAll();
-      showToast("Reset to live current time");
-    });
+    btnCurrentTime.addEventListener("click", snapToLiveCurrentTime);
 
-    // Status pill click also snaps to current time
-    statusPill.addEventListener("click", () => {
-      initTimelineAnchor();
-      renderAll();
-      showToast("Snapped to live time");
-    });
+    // Status pill click snaps to current time
+    statusPill.addEventListener("click", snapToLiveCurrentTime);
 
     // Advanced settings accordion toggle
     advancedToggleHeader.addEventListener("click", () => {
@@ -709,11 +747,13 @@
       if (e.key === "Escape") {
         closeModal();
       } else if (e.key === "ArrowLeft") {
+        isExploringMode = true;
         if (selectedSlotIndex > 0) {
           selectedSlotIndex--;
           renderAll();
         }
       } else if (e.key === "ArrowRight") {
+        isExploringMode = true;
         if (selectedSlotIndex < 47) {
           selectedSlotIndex++;
           renderAll();
